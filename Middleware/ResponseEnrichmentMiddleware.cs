@@ -30,7 +30,7 @@ public class ResponseEnrichmentMiddleware(RequestDelegate _next)
         }
 
         // Deserialize the response object
-        var responseObject = JsonSerializer.Deserialize<Product>(responseText, _serializerOptions);
+        var responseObject = JsonSerializer.Deserialize<object?>(responseText, _serializerOptions);
 
         context.Response.Body = originalBodyStream;
 
@@ -47,24 +47,21 @@ public class ResponseEnrichmentMiddleware(RequestDelegate _next)
         await context.Response.WriteAsync(enrichedResponse);
     }
 
-    private void EnrichProperties(Product responseObject)
+    private void EnrichProperties(object responseObject)
     {
         foreach (var prop in responseObject.GetType().GetProperties())
         {
-            var attribute = prop.GetCustomAttribute<EnrichableAttribute>();
-            if (attribute == null)
+            if (prop.Name.StartsWith("ID_Text"))
             {
-                continue;
+                var relatedProperty = responseObject.GetType().GetProperty(prop.Name.Substring("ID_Text_".Length));
+                if (relatedProperty == null)
+                {
+                    continue;
+                }
+                // Set enriched property based on related property value
+                var value = relatedProperty.GetValue(responseObject);
+                prop.SetValue(responseObject, value?.ToString());
             }
-
-            var relatedProperty = responseObject.GetType().GetProperty(attribute.RelatedProperty);
-            if (relatedProperty == null)
-            {
-                continue;
-            }
-            // Set enriched property based on related property value
-            var value = relatedProperty.GetValue(responseObject);
-            prop.SetValue(responseObject, value?.ToString());
         }
     }
 }
