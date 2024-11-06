@@ -42,8 +42,6 @@ public class ResponseEnrichmentMiddleware(RequestDelegate _next)
         // Enrich the response
         EnrichProperties(responseObject);
 
-        System.Console.WriteLine(responseObject);
-
         // Serialize back to JSON
         var enrichedResponse = JsonSerializer.Serialize(responseObject);
         await context.Response.WriteAsync(enrichedResponse);
@@ -54,16 +52,19 @@ public class ResponseEnrichmentMiddleware(RequestDelegate _next)
         foreach (var prop in responseObject.GetType().GetProperties())
         {
             var attribute = prop.GetCustomAttribute<EnrichableAttribute>();
-            if (attribute != null)
+            if (attribute == null)
             {
-                var relatedProperty = responseObject.GetType().GetProperty(attribute.RelatedProperty);
-                if (relatedProperty != null)
-                {
-                    // Set enriched property based on related property value
-                    var value = relatedProperty.GetValue(responseObject);
-                    prop.SetValue(responseObject, value?.ToString());
-                }
+                continue;
             }
+
+            var relatedProperty = responseObject.GetType().GetProperty(attribute.RelatedProperty);
+            if (relatedProperty == null)
+            {
+                continue;
+            }
+            // Set enriched property based on related property value
+            var value = relatedProperty.GetValue(responseObject);
+            prop.SetValue(responseObject, value?.ToString());
         }
     }
 }
