@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Text.Json;
-using Enricher.Models;
 using Enricher.Structure;
 
 namespace Enricher.Middleware;
@@ -14,6 +13,7 @@ public class ResponseEnrichmentMiddleware(RequestDelegate _next)
         // Save the original response body stream
         var originalBodyStream = context.Response.Body;
         string responseText;
+        Type responseType;
 
         // Use a MemoryStream to capture the response
         using (var responseBody = new MemoryStream())
@@ -23,6 +23,26 @@ public class ResponseEnrichmentMiddleware(RequestDelegate _next)
             // Proceed with the next middleware
             await _next(context);
 
+            // Check if response needs enrichment
+            if (context.Response.StatusCode == StatusCodes.Status200OK)
+            {
+                var endpoint = context.GetEndpoint();
+                var enrichableAttribute = endpoint?.Metadata.GetMetadata<ResponseTypeAttribute>();
+
+                if (enrichableAttribute?.ResponseType == null)
+                {
+                    context.Response.Body = originalBodyStream;
+                    return;
+                }
+
+                responseType = enrichableAttribute.ResponseType;
+            }
+            else 
+            {
+                context.Response.Body = originalBodyStream;
+                return;
+            }
+
             // Reset the stream position for reading
             responseBody.Seek(0, SeekOrigin.Begin);
             using var reader = new StreamReader(responseBody);
@@ -30,7 +50,7 @@ public class ResponseEnrichmentMiddleware(RequestDelegate _next)
         }
 
         // Deserialize the response object
-        var responseObject = JsonSerializer.Deserialize<object?>(responseText, _serializerOptions);
+        var responseObject = JsonSerializer.Deserialize(responseText, responseType, _serializerOptions);
 
         context.Response.Body = originalBodyStream;
 
@@ -40,28 +60,34 @@ public class ResponseEnrichmentMiddleware(RequestDelegate _next)
         }
 
         // Enrich the response
-        EnrichProperties(responseObject);
+        EnrichProperties(responseObject, responseType);
 
         // Serialize back to JSON
         var enrichedResponse = JsonSerializer.Serialize(responseObject);
         await context.Response.WriteAsync(enrichedResponse);
     }
 
-    private void EnrichProperties(object responseObject)
+    private void EnrichProperties(object responseObject, Type type)
     {
-        foreach (var prop in responseObject.GetType().GetProperties())
+        // iterate through all properties marked with the EnrichableAttribute
+        foreach (var enrichableProperty in type.GetProperties())
         {
-            if (prop.Name.StartsWith("ID_Text"))
+            var enrichableAttribute = enrichableProperty.GetCustomAttribute<EnrichableAttribute>();
+            if (enrichableAttribute == null)
             {
-                var relatedProperty = responseObject.GetType().GetProperty(prop.Name.Substring("ID_Text_".Length));
-                if (relatedProperty == null)
-                {
-                    continue;
-                }
-                // Set enriched property based on related property value
-                var value = relatedProperty.GetValue(responseObject);
-                prop.SetValue(responseObject, value?.ToString());
+                continue;
             }
+
+            // Get the property value
+            var sourceProperty = type.GetProperty(enrichableAttribute.SourceProperty);
+            var sourceValue = sourceProperty?.GetValue(responseObject);
+
+            // Convert the source value to the target type
+            var targetType = enrichableProperty.PropertyType;
+            var convertedValue = Conversion.ConvertToType(sourceValue, targetType);
+
+            // Set the property value
+            enrichableProperty.SetValue(responseObject, convertedValue);
         }
     }
 }

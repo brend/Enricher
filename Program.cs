@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Enricher.Middleware;
 using Enricher.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,7 +22,7 @@ app.UseHttpsRedirection();
 
 app.UseMiddleware<Enricher.Middleware.ResponseEnrichmentMiddleware>();
 
-app.MapGet("/products", () =>
+app.MapGet("/products", [ResponseType(typeof(Product))]() =>
 {
     return Results.Ok(new Product { Id = 17, Id_Text_Name = 4 });
 })

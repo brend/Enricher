@@ -3,10 +3,10 @@ namespace Enricher.Structure;
 [AttributeUsage(AttributeTargets.Property)]
 public class EnrichableAttribute : Attribute
 {
-    public EnrichableAttribute(string relatedProperty)
+    public EnrichableAttribute(string sourceProperty)
     {
-        RelatedProperty = relatedProperty;
+        SourceProperty = sourceProperty;
     }
 
-    public string RelatedProperty { get; }
+    public string SourceProperty { get; }
 }
