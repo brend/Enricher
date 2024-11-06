@@ -15,44 +15,45 @@ public class ResponseEnrichmentMiddleware(RequestDelegate _next)
         string responseText;
         Type responseType;
 
-        // Use a MemoryStream to capture the response
-        using (var responseBody = new MemoryStream())
+        try 
         {
-            context.Response.Body = responseBody;
-
-            // Proceed with the next middleware
-            await _next(context);
-
-            // Check if response needs enrichment
-            if (context.Response.StatusCode == StatusCodes.Status200OK)
+            // Use a MemoryStream to capture the response
+            using (var responseBody = new MemoryStream())
             {
+                context.Response.Body = responseBody;
+
+                // Proceed with the next middleware
+                await _next(context);
+
+                // Check if response needs enrichment
+                if (context.Response.StatusCode != StatusCodes.Status200OK)
+                {
+                    return;
+                }
+                
                 var endpoint = context.GetEndpoint();
                 var enrichableAttribute = endpoint?.Metadata.GetMetadata<ResponseTypeAttribute>();
 
                 if (enrichableAttribute?.ResponseType == null)
                 {
-                    context.Response.Body = originalBodyStream;
                     return;
                 }
 
                 responseType = enrichableAttribute.ResponseType;
+                
+                // Reset the stream position for reading
+                responseBody.Seek(0, SeekOrigin.Begin);
+                using var reader = new StreamReader(responseBody);
+                responseText = await reader.ReadToEndAsync();
             }
-            else 
-            {
-                context.Response.Body = originalBodyStream;
-                return;
-            }
-
-            // Reset the stream position for reading
-            responseBody.Seek(0, SeekOrigin.Begin);
-            using var reader = new StreamReader(responseBody);
-            responseText = await reader.ReadToEndAsync();
+        }
+        finally 
+        {
+            context.Response.Body = originalBodyStream;
         }
 
         // Deserialize the response object
         var responseObject = JsonSerializer.Deserialize(responseText, responseType, _serializerOptions);
-
-        context.Response.Body = originalBodyStream;
 
         if (responseObject == null)
         {
