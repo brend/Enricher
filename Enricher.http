@@ -1,0 +1,6 @@
+@Enricher_HostAddress = http://localhost:5069
+
+GET {{Enricher_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
